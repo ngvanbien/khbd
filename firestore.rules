@@ -1,0 +1,104 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required, immutable)
+    //   - email: string (required, immutable)
+    //   - role: string (required, enum: ['user', 'admin'])
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // Collection: evaluations
+    // Document ID: {evaluationId}
+    // Fields:
+    //   - userId: string (required, immutable)
+    //   - userEmail: string (required, immutable)
+    //   - fileName: string (required, immutable)
+    //   - createdAt: timestamp (required, immutable)
+    //   - overallFeedback: string (required)
+    //   - criteriaScores: list (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "vanbien@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'email', 'role', 'createdAt']) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 100 &&
+             data.email is string && isValidEmail(data.email) && data.email.size() < 150 &&
+             data.role in ['user', 'admin'] &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidEvaluation(data) {
+      return hasOnlyAllowedFields(['userId', 'userEmail', 'fileName', 'createdAt', 'overallFeedback', 'criteriaScores']) &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() < 100 &&
+             data.userEmail is string && isValidEmail(data.userEmail) && data.userEmail.size() < 150 &&
+             data.fileName is string && data.fileName.size() > 0 && data.fileName.size() < 255 &&
+             data.createdAt is timestamp &&
+             data.overallFeedback is string && data.overallFeedback.size() < 50000 &&
+             data.criteriaScores is list && data.criteriaScores.size() <= 10;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && 
+                    isOwner(userId) && 
+                    isValidUser(request.resource.data) && 
+                    request.resource.data.uid == userId &&
+                    (request.resource.data.role == 'user' || isAdmin());
+      allow update: if isAuthenticated() && 
+                    isValidUser(request.resource.data) &&
+                    request.resource.data.uid == resource.data.uid &&
+                    request.resource.data.email == resource.data.email &&
+                    request.resource.data.createdAt == resource.data.createdAt &&
+                    ((isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /evaluations/{evaluationId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && 
+                    isValidEvaluation(request.resource.data) &&
+                    request.resource.data.userId == request.auth.uid;
+      allow update: if false; // Evaluations are immutable
+      allow delete: if isAdmin();
+    }
+  }
+}

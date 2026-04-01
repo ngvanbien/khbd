@@ -1,0 +1,54 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a user of the application.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role", "createdAt"]
+    },
+    "Evaluation": {
+      "title": "Evaluation",
+      "description": "Stores the AI evaluation result of a lesson plan.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "fileName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "overallFeedback": { "type": "string" },
+        "criteriaScores": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "criterion": { "type": "string" },
+              "score": { "type": "number" },
+              "maxScore": { "type": "number" },
+              "reasoning": { "type": "string" },
+              "quote": { "type": "string" },
+              "suggestion": { "type": "string" }
+            },
+            "required": ["criterion", "score", "maxScore", "reasoning"]
+          }
+        }
+      },
+      "required": ["userId", "userEmail", "fileName", "createdAt", "overallFeedback", "criteriaScores"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Stores user profiles and roles."
+    },
+    "/evaluations/{evaluationId}": {
+      "schema": { "$ref": "#/entities/Evaluation" },
+      "description": "Stores all lesson plan evaluations."
+    }
+  }
+}
